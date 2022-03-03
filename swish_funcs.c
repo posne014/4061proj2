@@ -13,6 +13,10 @@
 #include "string_vector.h"
 #include "swish_funcs.h"
 
+//Takes in a condition that results in a truthy value if an error happened, an error message, and error return value.
+//Handles the error with those
+#define HANDLE_ERR(errorCond,msg,retVal) if(errorCond){perror(msg);return retVal;}
+
 #define MAX_ARGS 10
 
 int tokenize(char *s, strvec_t *tokens) {
@@ -24,9 +28,9 @@ int tokenize(char *s, strvec_t *tokens) {
 
     //MAYBE clear tokens. For now I'm gonna assume it might already have information in it, and we're just ADDING strings.
 
-    char *currentS = strtok(s, " ")
+    char *currentS = strtok(s, " ");
     while(currentS != NULL){
-        strvec_add(tokens,currentS)
+        strvec_add(tokens,currentS);
         currentS = strtok(NULL," ");
     }
     
@@ -40,6 +44,81 @@ int run_command(strvec_t *tokens) {
     // Hint: Build a string array from the 'tokens' vector and pass this into execvp()
     // Another Hint: You have a guarantee of the longest possible needed array, so you
     // won't have to use malloc.
+
+    //What happens if there's too many tokens!?!?!? Return too many tokens error or something...
+
+    //ok well here
+    if (tokens->length > MAX_ARGS+1){
+        perror("Too many tokens");
+        return 1;
+    }
+
+    //doing task 3
+    //setting default values if strvec doesn't find any redirect args. dup2 will be called with these values
+    int fileDes=STDOUT_FILENO;
+    int newFileDes=STDOUT_FILENO;
+
+    //THIS PROBABLY WONT WORK. You redirect input and output
+    //Ok so I can RECIEVE up to MAX_ARG arguments, It's just if they're >, >>, or <, then they don't get passed in
+    //So you trim them I guess
+
+    int redirIndex = strvec_find(tokens,">");
+    //keeping track of the index of lowest redirect argument;
+    int lowerRedirIndex;
+    if(redirIndex>=0){
+        //Found redirect output
+        fileDes = open(strvec_get(tokens,redirIndex+1),O_WRONLY|O_TRUNC|O_CREAT,S_IRUSR | S_IWUSR);
+        newFileDes=STDOUT_FILENO;
+    } else {
+        redirIndex = strvec_find(tokens,">>");
+        if(redirIndex>=0){
+            //Found redirect append output (and redirect regular output wasn't found.)
+            //The project 2 page says we can assume only 1 output arg will be present.
+            //Also only 1 redirect in and 1 redirect out.
+            fileDes = open(strvec_get(tokens,redirIndex+1),O_WRONLY|O_APPEND|O_CREAT,S_IRUSR | S_IWUSR);
+            newFileDes=STDOUT_FILENO;
+        }
+    }
+    HANDLE_ERR(fileDes==-1,"Failed to open output file",1)
+
+    //updating lowerRedirIndex
+    lowerRedirIndex=redirIndex;
+
+    dup2(fileDes,newFileDes);
+    redirIndex = strvec_find(tokens,"<");
+
+    if(redirIndex>=0){
+        //Found redirect input
+        
+        //updating lowerRedirIndex
+        if(lowerRedirIndex>redirIndex || lowerRedirIndex==-1){lowerRedirIndex=redirIndex;}
+
+        fileDes = open(strvec_get(tokens,redirIndex+1),O_RDONLY);
+        HANDLE_ERR(fileDes==-1,"Failed to open input file",1)
+
+        newFileDes=STDIN_FILENO;
+    }
+    dup2(fileDes,newFileDes);
+
+    //taking out the redirect args
+    if(lowerRedirIndex!=-1){strvec_take(tokens,lowerRedirIndex);}
+
+    //making an array with 1 more than the amount of arguments. Then making that last argument the NULL sentinel
+    char * args[tokens->length + 1];
+    args[tokens->length] = NULL;
+
+    //putting each of the tokens into the args array
+    for(int i=0;i<(tokens->length);i++){
+        args[i]=strvec_get(tokens,i);
+    }
+
+    //calling exec
+    if (execvp(args[0],args)==-1){
+        perror("exec");
+        return 1;
+    }
+
+    //um make sure to | perror("exec") | if exec fails.
 
     // TODO Task 3: Extend this function to perform output redirection before exec()'ing
     // Check for '<' (redirect input), '>' (redirect output), '>>' (redirect and append output)

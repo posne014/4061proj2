@@ -10,6 +10,14 @@
 #include "swish_funcs.h"
 
 #define CMD_LEN 512
+
+//it takes stdin and reads at most CMD_LEN-1 characters, so any arguments used in here can't be more than CMD_LEN
+#define MAX_TOKEN_LENGTH CMD_LEN
+//REMOVE MAYBE IDK IF THIS WILL BE USEFUL...
+
+//According to google dot com, the max path length for windows is 260 and for linux it's 4096
+#define MAX_PATH_LENGTH 4096
+
 #define PROMPT "@> "
 
 int main(int argc, char **argv) {
@@ -65,6 +73,13 @@ int main(int argc, char **argv) {
         if (strcmp(first_token, "pwd") == 0) {
             // TODO Task 1: Print the shell's current working directory
             // Use the getcwd() system call
+            char path[MAX_PATH_LENGTH];
+            //According to man getcwd, it returns "a null-terminated string containing an absolute pathname".
+            //Not sure what happens after the null character so I'm going to clear the whole thing.
+            memset(path, 0, MAX_PATH_LENGTH);
+            //Just a reminder to myself that 0 as a character is the null terminator '\0'. '0' is 48
+            getcwd(path,MAX_PATH_LENGTH);
+            printf("%s\n",path);
         }
 
         else if (strcmp(first_token, "cd") == 0) {
@@ -73,6 +88,18 @@ int main(int argc, char **argv) {
             // If the user supplied an argument (token at index 1), change to that directory
             // Otherwise, change to the home directory by default
             // This is available in the HOME environment variable (use getenv())
+            const char *second_token = strvec_get(&tokens,1);
+            
+            //char defaultPath[MAX_PATH_LENGTH];
+            //memset(defaultPath, 0, MAX_PATH_LENGTH);
+
+            if(second_token != NULL){
+                if(chdir(second_token)==-1){
+                    perror("chdir");
+                }
+            } else {
+                chdir(getenv("HOME"));
+            }
         }
 
         else if (strcmp(first_token, "exit") == 0) {
@@ -133,6 +160,31 @@ int main(int argc, char **argv) {
             //   1. Use fork() to spawn a child process
             //   2. Call run_command() in the child process
             //   2. In the parent, use waitpid() to wait for the program to exit
+
+            //1. Forking
+            pid_t child_id = fork();
+            //fork creates a child process and returns a different pid_t in each. In the parent, the child process ID is returned, and in the child, a pid_t of 0 is returned.
+            if(child_id==0){
+                //child process
+
+                //2. running command
+                
+                //If things go well, run_command should call exec and everything past this should cease to exist or something
+                //Otherwise exec failed, which will result in run_command returning 1.
+                //We could probably just return 1 after run_command since the only way it'd run is if exec failed, but idk if that's
+                //good or not.
+                if(run_command(&tokens)==1){
+                    //The error message is already set in run_command after exec fails, so we don't do anything else with the error message.
+                    //We just return 1
+                    return 1;
+                }
+                printf("HOW DID YOU GET HERE?!?!?!?!");
+            } else {
+                //parent process
+
+                // waiting
+                waitpid(child_id,NULL,0);
+            }
 
             // TODO Task 4: Set the child process as the target of signals sent to the terminal
             // via the keyboard.
